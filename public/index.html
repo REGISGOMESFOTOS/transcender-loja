@@ -1523,7 +1523,7 @@ function doCheckout(){
     }
   }).catch(function(e){
     if(win)try{win.close();}catch(x){}
-    ui.paying=false;ui.err.checkout=e.message||'Não deu para finalizar agora. Tente de novo.';
+    ui.paying=false;ui.err.checkout=(e.message||'Não deu para finalizar agora. Tente de novo.')+(e.data&&e.data.detalhe?' ['+e.data.detalhe+']':'');
     if(e.data&&e.data.estoque)reloadStoreQuiet();
     render();
   });

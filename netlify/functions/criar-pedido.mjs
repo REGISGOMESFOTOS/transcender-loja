@@ -100,7 +100,7 @@ export default async (req) => {
     } catch (e) {
       console.error('PagBank checkout', e.status, e.message, JSON.stringify(e.data || {}));
       try { await devolver(reserved); } catch (e2) { console.error('devolver', e2); }
-      return json({ error: 'Não conseguimos abrir o pagamento agora. Tente de novo ou finalize pelo WhatsApp.' }, 502);
+      return json({ error: 'Não conseguimos abrir o pagamento agora. Tente de novo ou finalize pelo WhatsApp.', detalhe: `PagBank ${e.status || ''}: ${String(e.message || '').slice(0, 300)}` }, 502);
     }
   }
 
