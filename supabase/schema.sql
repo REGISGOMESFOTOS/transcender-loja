@@ -162,4 +162,4 @@ create policy "fotos equipe apaga" on storage.objects for delete to authenticate
 insert into public.config (id, dados) values (1, '{}'::jsonb) on conflict (id) do nothing;
 
 -- 8) SEU E-MAIL na equipe (troque pelo e-mail que você vai usar no Painel)
-insert into public.equipe (email) values (regisbgomes@gmail.com) on conflict do nothing;
+insert into public.equipe (email) values ('regisbgomes@gmail.com') on conflict do nothing;
