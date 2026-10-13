@@ -1,7 +1,13 @@
 // Funções compartilhadas pelo servidor da loja (Netlify Functions).
 // Nada aqui roda no navegador: as chaves secretas ficam só no servidor.
 
-const env = (k, d = '') => (globalThis.Netlify?.env?.get?.(k) ?? process.env[k] ?? d);
+const env = (k, d = '') => {
+  let v;
+  try { v = globalThis.Netlify?.env?.get?.(k); } catch {}
+  if (!v) v = process.env[k];
+  return String(v || d).trim();
+};
+export const envStatus = () => Object.fromEntries(['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SITE_URL', 'PAGBANK_TOKEN', 'PAGBANK_ENV', 'RESEND_API_KEY', 'EMAIL_AVISOS'].map((k) => [k, !!env(k)]));
 
 export const cfg = () => ({
   supabaseUrl: env('SUPABASE_URL').replace(/\/+$/, ''),
