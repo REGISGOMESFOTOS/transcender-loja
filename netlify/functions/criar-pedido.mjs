@@ -3,13 +3,15 @@
 // reserva as peças e registra o pedido. Para Pix/cartão, cria o checkout no PagBank.
 import { cfg, json, loadStore, buildOrder, reservar, devolver, putDoc, newCode, stamp, sendEmail, orderEmailHtml, pagbank, cents, getDoc } from '../lib/loja.mjs';
 
-const MINUTOS_PAGAR = 60; // tempo para pagar online antes de liberar as peças
+const MINUTOS_PAGAR = 60;
+const PAGAMENTO_NO_SITE = false; // ligar quando o PagBank liberar a conta // tempo para pagar online antes de liberar as peças
 
 export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   let body;
   try { body = await req.json(); } catch { return json({ error: 'Pedido inválido.' }, 400); }
   const metodo = ['pix', 'cartao', 'whatsapp'].includes(body?.metodo) ? body.metodo : null;
+  if (metodo !== 'whatsapp' && !PAGAMENTO_NO_SITE) return json({ error: 'Pagamento pelo site indisponível no momento. Finalize pelo WhatsApp.' }, 400);
   if (!metodo) return json({ error: 'Escolha a forma de pagamento.' }, 400);
 
   let store;
