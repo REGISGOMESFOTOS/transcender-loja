@@ -1481,13 +1481,34 @@ function renderTeam(){
   return h+'</div>';
 }
 function renderImport(){
-  return '<div class="form"><h3>Importar da loja antiga</h3><p class="hint" style="margin:0">Use o arquivo <b>importacao-loja.json</b> que o Claude gerou. Os produtos, fotos, categorias e configurações entram aqui; depois toque em “Publicar alterações”.</p><label class="btn sm" style="justify-self:start">Escolher arquivo<input type="file" id="imp-file" accept=".json,application/json" hidden></label></div>';
+  return '<div class="form"><h3>Importar da loja antiga</h3><p class="hint" style="margin:0">Use o arquivo <b>.json</b> que o Claude gerou (da loja antiga ou da sua planilha de produtos). Depois toque em “Publicar alterações”.</p><label class="btn sm" style="justify-self:start">Escolher arquivo<input type="file" id="imp-file" accept=".json,application/json" hidden></label></div>';
+}
+function normName(x){return String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^camisa\s+/,'').replace(/\s+/g,' ').trim();}
+function mergeImport(j){
+  // adiciona produtos novos e atualiza os que já existem (mesmo nome), mantendo fotos e descrição
+  var novos=0,atual=0,custoNovo={};
+  (j.categories||[]).forEach(function(c){
+    if(!state.categories.some(function(x){return normName(x.name)===normName(c.name);}))state.categories.push({id:uid('c'),name:c.name});
+  });
+  function catId(nome){var c=state.categories.find(function(x){return normName(x.name)===normName(nome);});return c?c.id:null;}
+  j.products.forEach(function(np){
+    var ex=state.products.find(function(p){return normName(p.name)===normName(np.name);});
+    var dados={categoryId:catId(np.category),price:np.price,salePrice:np.salePrice||null,colors:np.colors||[],sizes:np.sizes||[],trackStock:true,stock:np.stock||{},active:true};
+    if(ex){Object.assign(ex,dados);if(np.desc&&!ex.desc)ex.desc=np.desc;atual++;}
+    else{ex=Object.assign({id:uid('p'),name:np.name,desc:np.desc||'',images:[]},dados);state.products.push(ex);novos++;}
+    if(typeof np.cost==='number')custoNovo[ex.id]=np.cost;
+  });
+  state=normalize(state);
+  if(db&&Object.keys(custoNovo).length)db.doc('privado/custos').set(Object.assign({},costs,custoNovo)).catch(function(){});
+  ui.msg='Planilha lida: '+novos+' produtos novos e '+atual+' atualizados. Confira e toque em “Publicar alterações” para colocar na loja.';
+  ui.tab='produtos';render();
 }
 function importFile(f){
   var r=new FileReader();
   r.onload=function(){
     try{
       var j=JSON.parse(r.result);
+      if(j&&j.modo==='mesclar'&&Array.isArray(j.products)){mergeImport(j);return;}
       if(!j||!j.settings||!Array.isArray(j.products))throw new Error('formato');
       state=normalize({settings:j.settings,categories:j.categories||[],products:j.products});
       var jobs=[];
