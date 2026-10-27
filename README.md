@@ -26,6 +26,9 @@ Faça **na ordem**. Cada passo leva poucos minutos.
    - **anon / public** key (na aba *Legacy API keys*, começa com `eyJ...`)
    - **service_role** key (mesma aba, clique em *Reveal*). ⚠️ Esta é secreta: não mande para ninguém.
 
+### 1b. Histórico de segurança (recomendado)
+No SQL Editor, rode também o arquivo [`supabase/historico.sql`](supabase/historico.sql). Ele guarda uma cópia de tudo que for alterado ou apagado (produtos, configurações, pedidos, financeiro), para nada se perder.
+
 ### 2. Resend (e-mails)
 1. Em **resend.com** → **API Keys** → **Create API Key** (permissão *Sending access*). Copie a chave (`re_...`).
 2. Sem domínio próprio, o Resend só envia para o e-mail da sua conta Resend. Use esse e-mail no passo 4.

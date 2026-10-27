@@ -679,7 +679,7 @@ function renderAdmin(){
   var dt=dirty();
   var h='<header class="top"><div class="wrap"><div class="brand">Painel · '+esc(state.settings.name)+'</div><button class="btn sm" data-a="go-store">Ver loja</button><button class="btn sm ghost" data-a="logout">Sair</button></div></header>';
   h+='<main class="wrap admin">';
-  h+='<div class="abar"><div class="status'+(dt?' dirty':'')+'"><i></i>'+(dt?'Alterações ainda não publicadas':'Tudo salvo no site')+'</div><div class="radios">'+(dt?'<button class="btn sm ghost" data-a="discard">Descartar</button>':'')+'<button class="btn sm yellow" data-a="publish" '+(dt&&!ui.publishing?'':'disabled')+'>'+(ui.publishing?'Publicando…':'Publicar alterações')+'</button></div></div>';
+  h+='<div class="abar"><div class="status'+(dt?' dirty':'')+'"><i></i>'+(dt?'Alterações ainda não publicadas — toque em Publicar':'Tudo salvo no site')+'</div><div class="radios">'+(dt?'<button class="btn sm ghost" data-a="discard">Descartar</button>':'')+'<button class="btn sm yellow" data-a="publish" '+(dt&&!ui.publishing?'':'disabled')+'>'+(ui.publishing?'Publicando…':'Publicar alterações')+'</button></div></div>';
   if(ui.msg)h+='<div class="note">'+esc(ui.msg)+'</div>';
   if(ui.editing){h+=renderEditor();return h+'</main>';}
   h+='<div class="tabs" role="tablist">'+[['pedidos','Pedidos'],['financeiro','Financeiro'],['estoque','Estoque'],['avisos','Avisos'],['clientes','Clientes'],['produtos','Produtos'],['categorias','Categorias'],['config','Configurações']].map(function(t){var n=t[0]==='pedidos'?orders.filter(function(o){return ['novo','confirmado','pago'].indexOf(o.status)>=0;}).length:t[0]==='avisos'?readyAlerts().length:0;return '<button role="tab" data-a="tab" data-v="'+t[0]+'" aria-selected="'+(ui.tab===t[0])+'">'+t[1]+(n?'<span class="count">'+n+'</span>':'')+'</button>';}).join('')+'</div>';
@@ -1280,7 +1280,9 @@ function renderEditor(){
   } else h+='<span class="hint">Desmarcado, o produto vende sem limite de quantidade.</span>';
   h+='</div>';
   h+='<div class="field"><span>Fotos (a primeira é a capa)</span><div class="photos">'+e.images.map(function(src,i){return '<div class="photo"><div class="pic"><img src="'+src+'" alt="Foto '+(i+1)+'"></div><div class="pb"><button data-a="img-first" data-i="'+i+'" '+(i===0?'disabled':'')+'>'+(i===0?'Capa':'Tornar capa')+'</button><button data-a="img-rm" data-i="'+i+'">Remover</button></div></div>';}).join('')+
-    '<label class="upload">'+(ui.loadingImg?'Processando…':'+ Adicionar fotos')+'<input type="file" id="e-files" accept="image/*" multiple></label></div><span class="hint">Sem foto, a vitrine mostra o desenho de uma camisa na primeira cor.</span></div>';
+    '<label class="upload">'+(ui.loadingImg?'Enviando…':'+ Adicionar fotos')+'<input type="file" id="e-files" accept="image/*" multiple></label></div><span class="hint">As fotos ficam guardadas no servidor assim que você escolhe. Sem foto, a vitrine mostra o desenho de uma camisa.</span></div>';
+  var sp=ui.storedPhotos&&ui.storedPhotos.pid===e.id&&ui.storedPhotos.list?ui.storedPhotos.list.filter(function(u){return e.images.indexOf(u)<0;}):[];
+  if(sp.length)h+='<div class="field"><span>Fotos já enviadas deste produto (fora da vitrine)</span><div class="photos">'+sp.map(function(u){return '<div class="photo"><div class="pic"><img src="'+esc(u)+'" alt="Foto guardada" loading="lazy"></div><div class="pb"><button data-a="photo-restore" data-v="'+esc(u)+'">Usar de novo</button></div></div>';}).join('')+'</div><span class="hint">Nenhuma foto é apagada do servidor. Se alguma sumiu do produto, ela aparece aqui para você recolocar.</span></div>';
   h+='<div class="radios"><label><input type="checkbox" id="e-active" '+(e.active?'checked':'')+'> Mostrar na loja</label></div>';
   if(ui.err.edit)h+='<p class="err">'+esc(ui.err.edit)+'</p>';
   h+='<div class="radios"><button class="btn dark" data-a="save-product">Salvar produto</button><button class="btn ghost" data-a="cancel-edit">Cancelar</button></div><span class="hint">Depois de salvar, toque em “Publicar alterações” para os clientes verem.</span></div>';
@@ -1428,25 +1430,92 @@ function uploadAll(st){
 function productRow(p,i){var d=clone(p);delete d.stock;delete d.id;return {id:p.id,dados:d,ordem:i,atualizado:new Date().toISOString()};}
 function publish(okMsg){
   if(!canEdit||!sbc){ui.msg='Entre com o login da equipe para salvar.';render();return Promise.resolve();}
+  if(ui.publishing){ui.publishAgain=okMsg||true;return Promise.resolve();}
   ui.publishing=true;ui.msg='';render();
   var okText=okMsg||'Salvo. Os clientes já veem a versão nova.';
+  var J=function(x){return JSON.stringify(x===undefined?null:x);};
+  // junta 3 versões: o que eu carreguei (base), o que eu mudei (mine) e o que está no servidor agora (srv)
+  function merge3(base,mine,srv){
+    var out={},keys={};[base,mine,srv].forEach(function(o){Object.keys(o||{}).forEach(function(k){keys[k]=1;});});
+    Object.keys(keys).forEach(function(k){
+      if(k==='images'){out[k]=mergeList(base&&base[k],mine&&mine[k],srv&&srv[k]);return;}
+      var mineChanged=J(mine&&mine[k])!==J(base&&base[k]);
+      var v=mineChanged?(mine||{})[k]:(srv||{})[k];
+      if(v!==undefined)out[k]=v;
+    });
+    return out;
+  }
+  // fotos: nunca some uma foto que outra pessoa/aba adicionou; só sai a que EU tirei
+  function mergeList(base,mine,srv){
+    base=base||[];mine=mine||[];srv=srv||[];
+    var removidas=base.filter(function(u){return mine.indexOf(u)<0;});
+    var res=mine.slice();
+    srv.forEach(function(u){if(res.indexOf(u)<0&&removidas.indexOf(u)<0)res.push(u);});
+    return res;
+  }
+  function strip(p){var d=clone(p);delete d.stock;delete d.id;return d;}
   return uploadAll(state).then(function(){
-    var savedById={};SAVED.products.forEach(function(p){savedById[p.id]=p;});
-    var withStock=[],noStock=[];
-    state.products.forEach(function(p,i){var r=productRow(p,i);var old=savedById[p.id];if(!old||JSON.stringify(old.stock||{})!==JSON.stringify(p.stock||{})){r.estoque=p.stock||{};withStock.push(r);}else noStock.push(r);});
+    return Promise.all([sbc.from('produtos').select('id,dados,estoque,ordem'),sbc.from('config').select('dados').eq('id',1)]);
+  }).then(function(rs){
+    if(rs[0].error)throw rs[0].error;if(rs[1].error)throw rs[1].error;
+    var srvById={};(rs[0].data||[]).forEach(function(r){srvById[r.id]=r;});
+    var baseById={};SAVED.products.forEach(function(p){baseById[p.id]=p;});
+    var rowsStock=[],rowsNoStock=[],ops=[];
+    state.products.forEach(function(p,i){
+      var base=baseById[p.id], srv=srvById[p.id];
+      if(!base){ // produto novo
+        rowsStock.push({id:p.id,dados:strip(p),estoque:p.stock||{},ordem:i,atualizado:new Date().toISOString()});return;
+      }
+      var dadosMudou=J(strip(p))!==J(strip(base)), estoqueMudou=J(p.stock||{})!==J(base.stock||{}), ordemMudou=SAVED.products.indexOf(base)!==i;
+      if(!dadosMudou&&!estoqueMudou&&!ordemMudou)return; // não mexi: não regravo nada
+      if(!srv){ // alguém apagou no servidor enquanto eu editava: recria com o que eu tenho
+        rowsStock.push({id:p.id,dados:strip(p),estoque:p.stock||{},ordem:i,atualizado:new Date().toISOString()});return;
+      }
+      var row={id:p.id,dados:dadosMudou?merge3(strip(base),strip(p),srv.dados||{}):srv.dados,ordem:i,atualizado:new Date().toISOString()};
+      if(estoqueMudou){
+        var est=Object.assign({},srv.estoque||{});
+        var ks={};Object.keys(p.stock||{}).concat(Object.keys(base.stock||{})).forEach(function(k){ks[k]=1;});
+        Object.keys(ks).forEach(function(k){if(J((p.stock||{})[k])!==J((base.stock||{})[k])){if((p.stock||{})[k]===undefined)delete est[k];else est[k]=p.stock[k];}});
+        row.estoque=est;rowsStock.push(row);
+      } else rowsNoStock.push(row);
+    });
     var gone=SAVED.products.filter(function(p){return !state.products.some(function(x){return x.id===p.id;});}).map(function(p){return p.id;});
-    var ops=[sbc.from('config').upsert({id:1,dados:{settings:state.settings,categories:state.categories},atualizado:new Date().toISOString()})];
-    if(withStock.length)ops.push(sbc.from('produtos').upsert(withStock));
-    if(noStock.length)ops.push(sbc.from('produtos').upsert(noStock));
+    var baseConf={settings:SAVED.settings,categories:SAVED.categories}, mineConf={settings:state.settings,categories:state.categories};
+    if(J(baseConf)!==J(mineConf)){
+      var srvConf=(rs[1].data&&rs[1].data[0]&&rs[1].data[0].dados)||{};
+      var conf={settings:merge3(SAVED.settings,state.settings,srvConf.settings||{}),categories:J(state.categories)!==J(SAVED.categories)?state.categories:(srvConf.categories||state.categories)};
+      ops.push(sbc.from('config').upsert({id:1,dados:conf,atualizado:new Date().toISOString()}));
+    }
+    if(rowsStock.length)ops.push(sbc.from('produtos').upsert(rowsStock));
+    if(rowsNoStock.length)ops.push(sbc.from('produtos').upsert(rowsNoStock));
     if(gone.length)ops.push(sbc.from('produtos').delete().in('id',gone));
     return Promise.all(ops);
   }).then(function(rs){
-    var err=rs.find(function(r){return r&&r.error;});if(err)throw err.error;
-    SAVED=clone(state);ui.publishing=false;ui.msg=okText;render();
+    var err=(rs||[]).find(function(r){return r&&r.error;});if(err)throw err.error;
+    return fetchStore();
+  }).then(function(fresh){
+    var editing=ui.editing;
+    SAVED=fresh;state=clone(fresh);ui.editing=editing;
+    ui.publishing=false;ui.msg=okText;render();
+    if(ui.publishAgain){var m=ui.publishAgain;ui.publishAgain=null;if(dirty())publish(m===true?undefined:m);}
   }).catch(function(e){
-    console.error(e);ui.publishing=false;
-    ui.msg='Não deu para salvar agora'+(e&&e.message?' ('+e.message+')':'')+'. Confira a internet e tente de novo.';render();
+    console.error(e);ui.publishing=false;ui.publishAgain=null;
+    ui.msg='Não deu para salvar agora'+(e&&e.message?' ('+e.message+')':'')+'. Suas alterações continuam aqui: confira a internet e toque em “Publicar alterações”.';render();
   });
+}
+
+/* fotos já enviadas de um produto (ficam guardadas no servidor mesmo se saírem do produto) */
+function loadStoredPhotos(pid){
+  if(!sbc)return;
+  ui.storedPhotos={pid:pid,list:null};
+  sbc.storage.from('fotos').list('produtos/'+pid,{limit:200,sortBy:{column:'created_at',order:'desc'}}).then(function(r){
+    if(!ui.storedPhotos||ui.storedPhotos.pid!==pid)return;
+    ui.storedPhotos.list=(r.data||[]).filter(function(f){return f.name&&f.name.indexOf('.')>0;}).map(function(f){return sbc.storage.from('fotos').getPublicUrl('produtos/'+pid+'/'+f.name).data.publicUrl;});
+    if(ui.editing&&ui.editing.id===pid)render();
+  });
+}
+function uploadEditorPhoto(dataUrl,pid){
+  return uploadIfData(dataUrl,'produtos/'+pid).catch(function(){return dataUrl;});
 }
 
 /* ---------- Login da equipe ---------- */
@@ -1503,7 +1572,7 @@ function afterAuth(session){
 function startPanelData(){
   try{sbc.auth.getSession().then(function(r){var t=r&&r.data&&r.data.session&&r.data.session.access_token;if(t&&sbc.realtime&&sbc.realtime.setAuth)sbc.realtime.setAuth(t);});}catch(e){}
   var d=makeDb(sbc);db=d;
-  function atualizar(){if(!canEdit)return;['pedidos','avisos'].forEach(function(c){d.refresh(c);});}
+  function atualizar(){if(!canEdit)return;['pedidos','avisos'].forEach(function(c){d.refresh(c);});if(!ui.editing&&!ui.publishing&&!dirty())reloadProducts();}
   setInterval(function(){if(!document.hidden)atualizar();},30000);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)atualizar();});
   d.collection('pedidos').orderBy('ts','desc').limit(1000).onSnapshot(function(snap){
@@ -1740,14 +1809,14 @@ app.addEventListener('click',function(ev){
     case 'o-status':setStatus(id,v);return;
     case 'c-toggle':ui.openClient=ui.openClient===id?null:id;ui.confirmCancel=null;break;
     case 'new-product':ui.editing={cost:'',id:uid('p'),name:'',categoryId:ui.cat!=='all'?ui.cat:(state.categories[0]&&state.categories[0].id)||null,price:'',salePrice:'',desc:'',colors:[],sizes:['P','M','G','GG'],images:[],active:true,trackStock:true,stock:{}};ui.err={};ui.msg='';window.scrollTo(0,0);break;
-    case 'edit-product':ui.editing=clone(prodById(id));ui.editing.cost=costOf(id);ui.err={};ui.msg='';window.scrollTo(0,0);break;
+    case 'edit-product':ui.editing=clone(prodById(id));ui.editing.cost=costOf(id);loadStoredPhotos(id);ui.err={};ui.msg='';window.scrollTo(0,0);break;
     case 'cancel-edit':ui.editing=null;ui.err={};break;
     case 'ask-del':ui.confirmDel=id;break;
     case 'cancel-del':ui.confirmDel=null;break;
-    case 'del-product':state.products=state.products.filter(function(p){return p.id!==id;});cart=cart.filter(function(l){return l.pid!==id;});saveCart();ui.confirmDel=null;break;
+    case 'del-product':state.products=state.products.filter(function(p){return p.id!==id;});cart=cart.filter(function(l){return l.pid!==id;});saveCart();ui.confirmDel=null;publish('Produto apagado da loja.');return;
     case 'rm-logo':state.settings.logo='';break;
     case 'del-examples':state.products=state.products.filter(function(p){return !p.example;});break;
-    case 'toggle-active':var pp=prodById(id);pp.active=!pp.active;break;
+    case 'toggle-active':var pp=prodById(id);pp.active=!pp.active;publish(pp.active?'Produto visível na loja.':'Produto ocultado da loja.');return;
     case 'add-color':
       var nn=document.getElementById('nc-name').value.trim(), hx=document.getElementById('nc-hex').value;
       if(!nn){ui.err.edit='Dê um nome para a cor antes de adicionar.';break;}
@@ -1758,6 +1827,7 @@ app.addEventListener('click',function(ev){
       var order=['PP','P','M','G','GG','XG','XGG'];s.sort(function(x,y){var a1=order.indexOf(x),b1=order.indexOf(y);return (a1<0?99:a1)-(b1<0?99:b1);});break;
     case 'add-size':var ns=document.getElementById('ns').value.trim();if(ns&&ui.editing.sizes.indexOf(ns)<0)ui.editing.sizes.push(ns);break;
     case 'img-first':var im=ui.editing.images.splice(i,1)[0];ui.editing.images.unshift(im);break;
+    case 'photo-restore':if(ui.editing&&ui.editing.images.indexOf(v)<0)ui.editing.images.push(v);break;
     case 'img-rm':ui.editing.images.splice(i,1);break;
     case 'save-product':
       var e=ui.editing, pr=num(e.price), sp=num(e.salePrice);
@@ -1772,7 +1842,7 @@ app.addEventListener('click',function(ev){
       var out={id:e.id,name:e.name.trim(),categoryId:e.categoryId||null,price:pr,salePrice:sp,desc:e.desc||'',colors:e.colors,sizes:e.sizes,images:e.images,active:!!e.active,trackStock:!!e.trackStock,stock:stock};
       var idx=state.products.findIndex(function(p){return p.id===e.id;});
       if(idx>=0)state.products[idx]=out;else state.products.unshift(out);
-      ui.editing=null;ui.err={};ui.msg='Produto salvo. Toque em “Publicar alterações” para colocar na loja.';break;
+      ui.editing=null;ui.err={};ui.storedPhotos=null;publish('Produto salvo e publicado na loja.');return;
     case 'add-cat':
       var cn=document.getElementById('new-cat').value.trim();
       if(!cn){ui.err.cat='Escreva o nome da categoria.';break;}
@@ -1818,8 +1888,12 @@ app.addEventListener('change',function(ev){
   if(t.id==='e-files'&&t.files&&t.files.length){
     readEditor();var files=[].slice.call(t.files);ui.loadingImg=true;render();
     Promise.all(files.map(function(f){return compress(f).catch(function(){return null;});})).then(function(list){
-      list.forEach(function(d){if(d&&ui.editing)ui.editing.images.push(d);});
-      ui.loadingImg=false;if(list.some(function(d){return !d;}))ui.err.edit='Uma das fotos não pôde ser lida. Tente outra imagem (JPG ou PNG).';render();
+      var pid=ui.editing&&ui.editing.id;
+      Promise.all(list.map(function(d){return d?uploadEditorPhoto(d,pid):null;})).then(function(urls){
+        urls.forEach(function(u){if(u&&ui.editing&&ui.editing.id===pid)ui.editing.images.push(u);});
+        ui.loadingImg=false;if(list.some(function(d){return !d;}))ui.err.edit='Uma das fotos não pôde ser lida. Tente outra imagem (JPG ou PNG).';
+        if(pid)loadStoredPhotos(pid);render();
+      });
     });
   }
 });
