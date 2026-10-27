@@ -380,6 +380,14 @@ button.lcell:hover{border-color:var(--ink)}
 footer .link{margin-top:6px}
 /* Relatório de estoque */
 .rtable td.num,.rtable th.num{text-align:right}
+.rtable tr.rprod td{padding-top:14px;border-bottom:1px solid var(--line)}
+.rhead{display:flex;align-items:center;gap:12px}
+.rhead b{display:block;font-size:1rem}.rhead small{color:var(--muted)}
+.rthumb{width:64px;height:64px;border-radius:10px;overflow:hidden;background:var(--bg);flex:none;display:grid;place-items:center;border:1px solid var(--line)}
+.rthumb img{width:100%;height:100%;object-fit:cover}.rthumb svg{width:80%;height:80%}
+.rind{padding-left:20px!important}
+.rdot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:-1px;border:1px solid rgba(0,0,0,.25)}
+@media print{body.printing-report .rprod,body.printing-report .rthumb{break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}body.printing-report .rdot{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .rtable tr.rsub td{font-weight:700;background:var(--bg);border-bottom:2px solid var(--line)}
 .rtable tr.rtot td{font-weight:800;font-family:var(--display);font-size:1rem;border-top:2px solid var(--ink);border-bottom:none}
 @media print{
@@ -1142,13 +1150,19 @@ function renderStockReport(cat){
   var h='<div class="form report" id="relatorio"><div class="colorrow" style="justify-content:space-between"><div><h3>Relatório de estoque atual</h3><span class="hint">'+esc(cat==='all'?'Todas as categorias':catName(cat))+' · gerado em '+esc(stamp())+'</span></div><div class="radios noprint"><button class="btn sm" data-a="st-csv">Baixar planilha</button><button class="btn sm" data-a="st-print">Imprimir / PDF</button></div></div>';
   h+='<div class="tiles"><div class="tile"><span>Peças</span><b>'+Tq.toLocaleString('pt-BR')+'</b></div><div class="tile"><span>Valor total de venda</span><b class="pos">'+money(Tv)+'</b></div><div class="tile"><span>Valor de custo</span><b>'+money(Tc)+'</b>'+(semCusto?'<small class="low">'+semCusto+' peças sem custo</small>':'')+'</div><div class="tile"><span>Modelos</span><b>'+new Set(rows.map(function(r){return r.prod;})).size+'</b></div></div>';
   if(!rows.length)return h+'<p class="hint">Nenhuma peça em estoque.</p></div>';
-  h+='<div class="scroll"><table class="otable rtable"><thead><tr><th>Produto</th><th>Cor</th><th>Tam.</th><th class="num">Qtd</th><th class="num">Preço de venda</th><th class="num">Total</th></tr></thead><tbody>';
+  h+='<div class="scroll"><table class="otable rtable"><thead><tr><th>Camisa / cor</th><th></th><th>Tam.</th><th class="num">Qtd</th><th class="num">Preço de venda</th><th class="num">Total</th></tr></thead><tbody>';
   var cur=null,sq=0,sv=0;
   function sub(){if(cur!==null)h+='<tr class="rsub"><td colspan="3">Total '+esc(cur)+'</td><td class="num">'+sq+'</td><td></td><td class="num">'+money(sv)+'</td></tr>';}
   rows.forEach(function(r){
-    if(r.prod!==cur){sub();cur=r.prod;sq=0;sv=0;}
+    if(r.prod!==cur){
+      sub();cur=r.prod;sq=0;sv=0;
+      var p=r.p, img=p.images&&p.images[0];
+      var th=img?'<img src="'+esc(img)+'" alt="" loading="lazy">':shirt(((p.colors||[])[0]||{}).hex||'#ccc');
+      h+='<tr class="rprod"><td colspan="6"><div class="rhead"><span class="rthumb">'+th+'</span><span><b>'+esc(r.prod)+'</b><small>'+esc(r.cat)+' · '+money(r.preco)+' cada</small></span></div></td></tr>';
+    }
     sq+=r.q;sv+=r.total;
-    h+='<tr><td>'+esc(r.prod)+'</td><td>'+esc(r.cor)+'</td><td>'+esc(r.tam)+'</td><td class="num">'+r.q+'</td><td class="num">'+money(r.preco)+'</td><td class="num">'+money(r.total)+'</td></tr>';
+    var hex=((r.p.colors||[]).find(function(c){return c.name===r.cor;})||{}).hex;
+    h+='<tr><td class="rind">'+(hex?'<i class="rdot" style="background:'+esc(hex)+'"></i>':'')+esc(r.cor)+'</td><td></td><td>'+esc(r.tam)+'</td><td class="num">'+r.q+'</td><td class="num">'+money(r.preco)+'</td><td class="num">'+money(r.total)+'</td></tr>';
   });
   sub();
   h+='<tr class="rtot"><td colspan="3">TOTAL DO ESTOQUE</td><td class="num">'+Tq+'</td><td></td><td class="num">'+money(Tv)+'</td></tr></tbody></table></div>';
