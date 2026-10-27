@@ -58,6 +58,12 @@ h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
 .fsize{min-width:42px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 9px;font-weight:700;font-family:var(--display);font-size:.88rem}
 .fcolor{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 11px 4px 5px;font-weight:600;font-size:.85rem}
 .fcolor .dot{width:16px;height:16px}
+.fpick{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 12px 5px 8px;font-weight:600;font-size:.88rem}
+.fpick .dot{width:16px;height:16px}
+.fpick[aria-expanded="true"]{border-color:var(--ink)}
+.fpick .chev{font-size:.62rem;color:var(--muted);margin-left:2px}
+.fcolors{padding-left:74px}
+@media (max-width:520px){.fcolors{padding-left:0}}
 .fsize[aria-pressed="true"],.fcolor[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink);background:var(--surface)}
 @media (max-width:520px){.flabel{min-width:100%}}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:.9rem}
@@ -510,7 +516,11 @@ function filterBar(){
   var o=filterOptions();if(!o.sizes.length&&!o.colors.length)return '';
   var h='<div class="ffilters">';
   if(o.sizes.length)h+='<div class="frow" role="group" aria-label="Filtrar por tamanho"><span class="flabel">Tamanho</span>'+o.sizes.map(function(t){return '<button class="fsize" data-a="f-size" data-v="'+esc(t)+'" aria-pressed="'+(ui.fSize===t)+'">'+esc(t)+'</button>';}).join('')+'</div>';
-  if(o.colors.length)h+='<div class="frow" role="group" aria-label="Filtrar por cor"><span class="flabel">Cor</span>'+o.colors.map(function(c){return '<button class="fcolor" data-a="f-color" data-v="'+esc(c.name)+'" aria-pressed="'+(normCor(ui.fColor)===normCor(c.name))+'" title="'+esc(c.name)+'"><i class="dot" style="background:'+esc(c.hex||'#ccc')+'"></i>'+esc(c.name)+'</button>';}).join('')+'</div>';
+  if(o.colors.length){
+    var sel=ui.fColor?o.colors.find(function(c){return normCor(c.name)===normCor(ui.fColor);}):null;
+    h+='<div class="frow"><span class="flabel">Cor</span><button class="fpick" data-a="f-colors" aria-expanded="'+(!!ui.fColorOpen)+'">'+(sel?'<i class="dot" style="background:'+esc(sel.hex||'#ccc')+'"></i>'+esc(sel.name):'Todas as cores')+'<span class="chev" aria-hidden="true">'+(ui.fColorOpen?'▲':'▼')+'</span></button>'+(ui.fColor?'<button class="link" data-a="f-color" data-v="'+esc(ui.fColor)+'">tirar cor</button>':'')+'</div>';
+  }
+  if(o.colors.length&&ui.fColorOpen)h+='<div class="frow fcolors" role="group" aria-label="Escolha a cor">'+o.colors.map(function(c){return '<button class="fcolor" data-a="f-color" data-v="'+esc(c.name)+'" aria-pressed="'+(normCor(ui.fColor)===normCor(c.name))+'" title="'+esc(c.name)+'"><i class="dot" style="background:'+esc(c.hex||'#ccc')+'"></i>'+esc(c.name)+'</button>';}).join('')+'</div>';
   if(ui.fSize||ui.fColor)h+='<div class="frow"><span class="hint">Mostrando camisas disponíveis'+(ui.fColor?' na cor <b>'+esc(ui.fColor)+'</b>':'')+(ui.fSize?' no tamanho <b>'+esc(ui.fSize)+'</b>':'')+'.</span><button class="link" data-a="f-clear">Limpar filtros</button></div>';
   return h+'</div>';
 }
@@ -1649,8 +1659,9 @@ app.addEventListener('click',function(ev){
   switch(a){
     case 'cat':ui.cat=id;break;
     case 'f-size':ui.fSize=ui.fSize===v?null:v;break;
-    case 'f-color':ui.fColor=normCor(ui.fColor)===normCor(v)?null:v;break;
-    case 'f-clear':ui.fSize=null;ui.fColor=null;break;
+    case 'f-color':ui.fColor=normCor(ui.fColor)===normCor(v)?null:v;ui.fColorOpen=false;break;
+    case 'f-colors':ui.fColorOpen=!ui.fColorOpen;break;
+    case 'f-clear':ui.fSize=null;ui.fColor=null;ui.fColorOpen=false;break;
     case 'open-product':ui.anim=true;ui.nsent=false;ui.ncode=null;ui.err={};ui.product=id;ui.img=0;ui.color=null;ui.size=null;ui.qty=1;p=prodById(id);
       if(p&&p.colors.length===1&&colorOk(p,p.colors[0].name))ui.color=p.colors[0].name;
       if(p&&p.sizes.length===1&&sizeOk(p,p.sizes[0]))ui.size=p.sizes[0];
