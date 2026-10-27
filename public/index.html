@@ -1150,15 +1150,26 @@ var CAT_CSS='.catov{position:fixed;inset:0;z-index:200;background:rgba(14,17,26,
 '.cpg .ceb{font-size:13px;letter-spacing:.28em;text-transform:uppercase;color:#e4b11f;font-weight:700}'+
 '.cpg h1{font-family:"Bricolage Grotesque","Arial Narrow",sans-serif;font-size:40px;line-height:1;margin:6px 0 6px;font-weight:800;letter-spacing:-.01em}'+
 '.cpg .csub{font-size:15px;color:#b9b2a0}'+
+'.cpg .cleg{margin-top:8px;font-size:12px;color:#b9b2a0}.cpg .cleg span{border:1.2px solid #f3ecda;color:#f3ecda;border-radius:6px;padding:0 6px;font-weight:700;margin:0 3px}.cpg .cleg small{background:#e4b11f;color:#1c2233;border-radius:4px;font-size:10px;padding:0 4px;margin-left:4px}'+
 '.cpg .cgrid{position:absolute;top:186px;left:44px;right:44px;bottom:84px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:24px}'+
 '.cpg .ccard{background:#fff;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 0 rgba(28,34,51,.06),0 10px 24px rgba(28,34,51,.08)}'+
-'.cpg .cph{flex:1;background:#ece5d3 center/cover no-repeat;position:relative}'+
+'.cpg .cph{flex:1;min-height:120px;background:#ece5d3;position:relative}'+
+'.cpg .cpi{position:absolute;inset:0;background:#ece5d3 center/cover no-repeat}'+
+'.cpg .cpx{position:absolute;inset:0;display:grid;gap:3px;background:#fff}.cpg .cpx .cpi{position:relative;inset:auto}'+
+'.cpg .cpx.two{grid-template-columns:1fr 1fr}'+
+'.cpg .cpx.many{grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr}.cpg .cpx.many .big{grid-row:1/3}'+
+'.cpg .cmore{position:absolute;inset:0;background:rgba(26,31,44,.55);color:#fff;font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center}'+
+'.cpg .ccores{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}'+
+'.cpg .ccor{display:flex;align-items:center;gap:8px;min-height:22px}'+
+'.cpg .cnm{font-size:13px;font-weight:700;width:112px;flex:none;display:flex;align-items:center;gap:6px;line-height:1.15}'+
+'.cpg .cnm i{width:12px;height:12px;border-radius:50%;border:1px solid rgba(0,0,0,.3);flex:none}'+
+'.cpg .compact .ccores{gap:3px}.cpg .compact .ccor{min-height:19px}.cpg .compact .cnm{font-size:12px}.cpg .compact .csz span{font-size:11px;padding:0 6px}.cpg .compact .cname{font-size:20px;margin-bottom:6px}.cpg .compact .cpr b{font-size:24px}'+
 '.cpg .cph .csale{position:absolute;top:14px;left:14px;background:#b23a2a;color:#fff;font-weight:800;font-size:13px;padding:5px 12px;border-radius:99px;letter-spacing:.04em}'+
-'.cpg .cinfo{padding:14px 18px 16px}'+
+'.cpg .cinfo{padding:12px 16px 14px}'+
 '.cpg .cname{font-family:"Bricolage Grotesque","Arial Narrow",sans-serif;font-size:22px;font-weight:800;line-height:1.1;margin:0 0 9px}'+
-'.cpg .csz{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}'+
-'.cpg .csz span{border:1.5px solid #1c2233;border-radius:8px;padding:2px 8px;font-size:13px;font-weight:700;line-height:1.4}'+
-'.cpg .csz small{font-weight:500;color:#5f6779;font-size:11px;margin-left:4px}'+
+'.cpg .csz{display:flex;flex-wrap:wrap;gap:4px}'+
+'.cpg .csz span{border:1.2px solid #1c2233;border-radius:6px;padding:0 7px;font-size:12px;font-weight:700;line-height:1.55;white-space:nowrap}'+
+'.cpg .csz small{font-weight:600;color:#fff;background:#1c2233;border-radius:4px;font-size:10px;padding:0 4px;margin-left:5px;vertical-align:1px}'+
 '.cpg .cpr{display:flex;align-items:baseline;gap:10px}'+
 '.cpg .cpr b{font-family:"Bricolage Grotesque","Arial Narrow",sans-serif;font-size:28px;font-weight:800;background:#e4b11f;padding:2px 14px;border-radius:10px;line-height:1.25}'+
 '.cpg .cpr s{color:#5f6779;font-size:15px}'+
@@ -1167,13 +1178,14 @@ var CAT_CSS='.catov{position:fixed;inset:0;z-index:200;background:rgba(14,17,26,
 '.catrender{position:fixed;left:-10000px;top:0;width:794px}';
 function catalogProducts(cat){
   return state.products.filter(function(p){return p.active!==false&&(cat==='all'||p.categoryId===cat);}).map(function(p){
-    var sizes=[];
-    sizeNames(p).forEach(function(sn){
-      var q=0;colorNames(p).forEach(function(cn){var v=stockOf(p,cn,sn);q+=(v===Infinity?1:v);});
-      if(q>0)sizes.push({s:sn,q:p.trackStock?q:null});
+    var cores=[];
+    colorNames(p).forEach(function(cn){
+      var sizes=[];
+      sizeNames(p).forEach(function(sn){var v=stockOf(p,cn,sn);if(v>0)sizes.push({s:sn,q:p.trackStock?v:null});});
+      if(sizes.length)cores.push({name:cn,hex:((p.colors||[]).find(function(c){return c.name===cn;})||{}).hex,sizes:sizes});
     });
-    return {p:p,sizes:sizes};
-  }).filter(function(x){return x.sizes.length>0;});
+    return {p:p,cores:cores,sizes:cores.length};
+  }).filter(function(x){return x.cores.length>0;});
 }
 function shirtData(hex){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#ece5d3"/>'+shirt(hex||'#c9c2b0').replace(/^<svg[^>]*>|<\/svg>$/g,'')+'</svg>');}
 function catalogHTML(cat,imgs){
@@ -1184,12 +1196,21 @@ function catalogHTML(cat,imgs){
   var site=(location.host||'').replace(/^www\./,'');
   return pages.map(function(pg,pi){
     var h='<div class="cpg"><div class="chd">'+(s.logo?'<div class="clogo" style="background-image:url(\''+esc(imgs[s.logo]||s.logo)+'\')"></div>':'')+
-      '<div><div class="ceb">'+esc(titulo)+' · '+esc(hoje)+'</div><h1>'+esc(s.name||'Transcender Camisas')+'</h1><div class="csub">'+esc(s.tagline||'Tamanhos e valores disponíveis')+'</div></div></div><div class="cgrid">';
+      '<div><div class="ceb">'+esc(titulo)+' · '+esc(hoje)+'</div><h1>'+esc(s.name||'Transcender Camisas')+'</h1><div class="csub">'+esc(s.tagline||'Tamanhos e valores disponíveis')+'</div><div class="cleg">Tamanho <span>M<small>3</small></span> = peças disponíveis</div></div></div><div class="cgrid">';
     pg.forEach(function(x){
-      var p=x.p, src=p.images&&p.images[0], bg=src?(imgs[src]||src):shirtData(((p.colors||[])[0]||{}).hex);
-      var promo=p.salePrice&&p.salePrice<p.price;
-      h+='<div class="ccard"><div class="cph" style="background-image:url(\''+esc(bg)+'\')">'+(promo?'<span class="csale">PROMOÇÃO</span>':'')+'</div><div class="cinfo"><div class="cname">'+esc(p.name)+'</div>'+
-        '<div class="csz">'+x.sizes.map(function(z){return '<span>'+esc(z.s||'Único')+(z.q!=null?'<small>'+z.q+(z.q===1?' peça':' peças')+'</small>':'')+'</span>';}).join('')+'</div>'+
+      var p=x.p, promo=p.salePrice&&p.salePrice<p.price;
+      var fotos=(p.images||[]).map(function(u){return imgs[u]||u;});
+      if(!fotos.length)fotos=x.cores.slice(0,3).map(function(c){return shirtData(c.hex);});
+      var bgs=function(u,cls,extra){return '<div class="'+cls+'" style="background-image:url(\''+esc(u)+'\')">'+(extra||'')+'</div>';};
+      var ph;
+      if(fotos.length===1)ph=bgs(fotos[0],'cpi');
+      else if(fotos.length===2)ph='<div class="cpx two">'+bgs(fotos[0],'cpi')+bgs(fotos[1],'cpi')+'</div>';
+      else ph='<div class="cpx many">'+bgs(fotos[0],'cpi big')+bgs(fotos[1],'cpi')+bgs(fotos[2],'cpi',fotos.length>3?'<span class="cmore">+'+(fotos.length-3)+'</span>':'')+'</div>';
+      var compact=x.cores.length>3?' compact':'';
+      h+='<div class="ccard"><div class="cph">'+ph+(promo?'<span class="csale">PROMOÇÃO</span>':'')+'</div><div class="cinfo'+compact+'"><div class="cname">'+esc(p.name)+'</div>'+
+        '<div class="ccores">'+x.cores.slice(0,6).map(function(c){return '<div class="ccor">'+(c.name?'<span class="cnm">'+(c.hex?'<i style="background:'+esc(c.hex)+'"></i>':'')+esc(c.name)+'</span>':'<span class="cnm">Tamanhos</span>')+
+          '<span class="csz">'+c.sizes.map(function(z){return '<span>'+esc(z.s||'Único')+(z.q!=null?'<small>'+z.q+'</small>':'')+'</span>';}).join('')+'</span></div>';}).join('')+
+          (x.cores.length>6?'<div class="ccor"><span class="cnm">+ '+(x.cores.length-6)+' cores</span></div>':'')+'</div>'+
         '<div class="cpr"><b>'+money(finalPrice(p))+'</b>'+(promo?'<s>'+money(p.price)+'</s>':'')+'</div></div></div>';
     });
     h+='</div><div class="cft"><span>Peça pelo WhatsApp <b>'+esc(formatPhone(s.whatsapp))+'</b></span><span>'+(site?'<b>'+esc(site)+'</b> · ':'')+'página '+(pi+1)+' de '+pages.length+'</span></div></div>';
@@ -1229,7 +1250,7 @@ function fitCatalog(){
 function downloadCatalog(btn){
   var msg=document.getElementById('catmsg');
   btn.disabled=true;btn.textContent='Gerando PDF…';
-  var urls={};catalogProducts(CAT.cat).forEach(function(x){if(x.p.images&&x.p.images[0])urls[x.p.images[0]]=1;});if(state.settings.logo)urls[state.settings.logo]=1;
+  var urls={};catalogProducts(CAT.cat).forEach(function(x){(x.p.images||[]).slice(0,3).forEach(function(u){urls[u]=1;});});if(state.settings.logo)urls[state.settings.logo]=1;
   var imgs={};
   Promise.all([
     window.html2canvas?0:loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
