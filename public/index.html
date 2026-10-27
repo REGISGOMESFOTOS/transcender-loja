@@ -1131,6 +1131,130 @@ function saveGoals(){
   db.doc('privado/metas').set(g).then(function(){ui.msg='Metas salvas.';render();}).catch(function(e){ui.msg='Não deu para salvar as metas'+(e&&e.code?' ('+e.code+')':'')+'.';render();});
 }
 /* ---------- Estoque ---------- */
+/* ===== Catálogo para cliente (PDF, 4 camisas por página) ===== */
+var CAT_CSS='.catov{position:fixed;inset:0;z-index:200;background:rgba(14,17,26,.82);display:flex;flex-direction:column}'+
+'.catbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;background:#1a1f2c;color:#f3ecda}'+
+'.catbar b{font-family:var(--display);font-size:1.05rem;margin-right:auto}'+
+'.catbar .chip{background:transparent;color:#f3ecda;border-color:#4a5168}.catbar .chip[aria-pressed="true"]{background:#e4b11f;color:#1c2233;border-color:#e4b11f}'+
+'.catbar .btn.pri{background:#e4b11f;color:#1c2233;border-color:#e4b11f}.catbar .btn.ghost{color:#f3ecda}'+
+'.catbar .catmsg{flex-basis:100%;font-size:.85rem;color:#b9b2a0}'+
+'@media (max-width:560px){.catbar b{flex-basis:100%}}'+
+'.catscroll{flex:1;overflow:auto;padding:20px 16px 40px;display:flex;flex-direction:column;align-items:center;gap:18px}'+
+'.catfit{width:min(794px,100%)}.catfit>.cpg{transform-origin:top left}'+
+/* página A4 794x1123 */
+'.cpg{width:794px;height:1123px;background:#f6f1e4;color:#1c2233;position:relative;overflow:hidden;font-family:"Figtree",system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35)}'+
+'.cpg *{box-sizing:border-box}'+
+'.cpg .chd{height:150px;background:#1a1f2c;color:#f3ecda;display:flex;align-items:center;gap:22px;padding:0 48px;position:relative}'+
+'.cpg .chd:after{content:"";position:absolute;left:0;right:0;bottom:-10px;height:10px;background:#e4b11f}'+
+'.cpg .clogo{width:92px;height:92px;border-radius:50%;background:#2a3042 center/cover no-repeat;flex:none;box-shadow:0 0 0 4px rgba(233,223,194,.25)}'+
+'.cpg .ceb{font-size:13px;letter-spacing:.28em;text-transform:uppercase;color:#e4b11f;font-weight:700}'+
+'.cpg h1{font-family:"Bricolage Grotesque","Arial Narrow",sans-serif;font-size:40px;line-height:1;margin:6px 0 6px;font-weight:800;letter-spacing:-.01em}'+
+'.cpg .csub{font-size:15px;color:#b9b2a0}'+
+'.cpg .cgrid{position:absolute;top:186px;left:44px;right:44px;bottom:84px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:24px}'+
+'.cpg .ccard{background:#fff;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 0 rgba(28,34,51,.06),0 10px 24px rgba(28,34,51,.08)}'+
+'.cpg .cph{flex:1;background:#ece5d3 center/cover no-repeat;position:relative}'+
+'.cpg .cph .csale{position:absolute;top:14px;left:14px;background:#b23a2a;color:#fff;font-weight:800;font-size:13px;padding:5px 12px;border-radius:99px;letter-spacing:.04em}'+
+'.cpg .cinfo{padding:14px 18px 16px}'+
+'.cpg .cname{font-family:"Bricolage Grotesque","Arial Narrow",sans-serif;font-size:22px;font-weight:800;line-height:1.1;margin:0 0 9px}'+
+'.cpg .csz{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}'+
+'.cpg .csz span{border:1.5px solid #1c2233;border-radius:8px;padding:2px 8px;font-size:13px;font-weight:700;line-height:1.4}'+
+'.cpg .csz small{font-weight:500;color:#5f6779;font-size:11px;margin-left:4px}'+
+'.cpg .cpr{display:flex;align-items:baseline;gap:10px}'+
+'.cpg .cpr b{font-family:"Bricolage Grotesque","Arial Narrow",sans-serif;font-size:28px;font-weight:800;background:#e4b11f;padding:2px 14px;border-radius:10px;line-height:1.25}'+
+'.cpg .cpr s{color:#5f6779;font-size:15px}'+
+'.cpg .cft{position:absolute;left:44px;right:44px;bottom:28px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#5f6779;border-top:1.5px solid #d8cfb8;padding-top:14px}'+
+'.cpg .cft b{color:#1c2233}'+
+'.catrender{position:fixed;left:-10000px;top:0;width:794px}';
+function catalogProducts(cat){
+  return state.products.filter(function(p){return p.active!==false&&(cat==='all'||p.categoryId===cat);}).map(function(p){
+    var sizes=[];
+    sizeNames(p).forEach(function(sn){
+      var q=0;colorNames(p).forEach(function(cn){var v=stockOf(p,cn,sn);q+=(v===Infinity?1:v);});
+      if(q>0)sizes.push({s:sn,q:p.trackStock?q:null});
+    });
+    return {p:p,sizes:sizes};
+  }).filter(function(x){return x.sizes.length>0;});
+}
+function shirtData(hex){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#ece5d3"/>'+shirt(hex||'#c9c2b0').replace(/^<svg[^>]*>|<\/svg>$/g,'')+'</svg>');}
+function catalogHTML(cat,imgs){
+  var s=state.settings, list=catalogProducts(cat), pages=[], per=4;
+  var hoje=new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  var titulo=cat==='all'?'Catálogo':catName(cat);
+  for(var i=0;i<list.length;i+=per)pages.push(list.slice(i,i+per));
+  var site=(location.host||'').replace(/^www\./,'');
+  return pages.map(function(pg,pi){
+    var h='<div class="cpg"><div class="chd">'+(s.logo?'<div class="clogo" style="background-image:url(\''+esc(imgs[s.logo]||s.logo)+'\')"></div>':'')+
+      '<div><div class="ceb">'+esc(titulo)+' · '+esc(hoje)+'</div><h1>'+esc(s.name||'Transcender Camisas')+'</h1><div class="csub">'+esc(s.tagline||'Tamanhos e valores disponíveis')+'</div></div></div><div class="cgrid">';
+    pg.forEach(function(x){
+      var p=x.p, src=p.images&&p.images[0], bg=src?(imgs[src]||src):shirtData(((p.colors||[])[0]||{}).hex);
+      var promo=p.salePrice&&p.salePrice<p.price;
+      h+='<div class="ccard"><div class="cph" style="background-image:url(\''+esc(bg)+'\')">'+(promo?'<span class="csale">PROMOÇÃO</span>':'')+'</div><div class="cinfo"><div class="cname">'+esc(p.name)+'</div>'+
+        '<div class="csz">'+x.sizes.map(function(z){return '<span>'+esc(z.s||'Único')+(z.q!=null?'<small>'+z.q+(z.q===1?' peça':' peças')+'</small>':'')+'</span>';}).join('')+'</div>'+
+        '<div class="cpr"><b>'+money(finalPrice(p))+'</b>'+(promo?'<s>'+money(p.price)+'</s>':'')+'</div></div></div>';
+    });
+    h+='</div><div class="cft"><span>Peça pelo WhatsApp <b>'+esc(formatPhone(s.whatsapp))+'</b></span><span>'+(site?'<b>'+esc(site)+'</b> · ':'')+'página '+(pi+1)+' de '+pages.length+'</span></div></div>';
+    return h;
+  });
+}
+function loadScript(src){return new Promise(function(ok,bad){var e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=function(){bad(new Error('não carregou '+src));};document.head.appendChild(e);});}
+function toDataUrl(url){
+  if(!url||/^data:/.test(url))return Promise.resolve(url);
+  return fetch(url,{mode:'cors'}).then(function(r){if(!r.ok)throw 0;return r.blob();}).then(function(b){return new Promise(function(ok){var fr=new FileReader();fr.onload=function(){ok(fr.result);};fr.readAsDataURL(b);});}).catch(function(){return null;});
+}
+var CAT={cat:'all',el:null};
+function openCatalog(cat){
+  if(!document.getElementById('cat-css')){var st=document.createElement('style');st.id='cat-css';st.textContent=CAT_CSS;document.head.appendChild(st);}
+  CAT.cat=cat||'all';
+  if(!CAT.el){CAT.el=document.createElement('div');CAT.el.className='catov';CAT.el.setAttribute('role','dialog');CAT.el.setAttribute('aria-label','Catálogo para cliente');document.body.appendChild(CAT.el);
+    CAT.el.addEventListener('click',function(e){var b=e.target.closest('[data-c]');if(!b)return;var a=b.getAttribute('data-c');
+      if(a==='close'){CAT.el.remove();CAT.el=null;window.removeEventListener('resize',fitCatalog);}
+      else if(a==='cat'){CAT.cat=b.getAttribute('data-v');drawCatalog();}
+      else if(a==='pdf')downloadCatalog(b);});
+    window.addEventListener('resize',fitCatalog);}
+  drawCatalog();
+}
+function drawCatalog(){
+  var n=catalogProducts(CAT.cat).length;
+  CAT.el.innerHTML='<div class="catbar"><b>Catálogo para cliente</b>'+
+    '<button class="chip" data-c="cat" data-v="all" aria-pressed="'+(CAT.cat==='all')+'">Todas</button>'+state.categories.map(function(c){return '<button class="chip" data-c="cat" data-v="'+c.id+'" aria-pressed="'+(CAT.cat===c.id)+'">'+esc(c.name)+'</button>';}).join('')+
+    '<button class="btn sm pri" data-c="pdf"'+(n?'':' disabled')+'>Baixar PDF</button><button class="btn sm ghost" data-c="close">Fechar</button>'+
+    '<span class="catmsg" id="catmsg">'+n+' camisa'+(n===1?'':'s')+' com estoque · '+Math.ceil(n/4)+' página'+(Math.ceil(n/4)===1?'':'s')+'. Camisas esgotadas ou ocultas não entram.</span></div>'+
+    '<div class="catscroll">'+(n?catalogHTML(CAT.cat,{}).map(function(pg){return '<div class="catfit">'+pg+'</div>';}).join(''):'<p style="color:#f3ecda">Nenhuma camisa com estoque nesta categoria.</p>')+'</div>';
+  fitCatalog();
+}
+function fitCatalog(){
+  if(!CAT.el)return;
+  CAT.el.querySelectorAll('.catfit').forEach(function(w){var k=Math.min(1,w.clientWidth/794);var pg=w.firstChild;pg.style.transform='scale('+k+')';w.style.height=(1123*k)+'px';});
+}
+function downloadCatalog(btn){
+  var msg=document.getElementById('catmsg');
+  btn.disabled=true;btn.textContent='Gerando PDF…';
+  var urls={};catalogProducts(CAT.cat).forEach(function(x){if(x.p.images&&x.p.images[0])urls[x.p.images[0]]=1;});if(state.settings.logo)urls[state.settings.logo]=1;
+  var imgs={};
+  Promise.all([
+    window.html2canvas?0:loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'),
+    window.jspdf?0:loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+  ].concat(Object.keys(urls).map(function(u){return toDataUrl(u).then(function(d){imgs[u]=d||'';});})).concat(document.fonts?[document.fonts.ready]:[]))
+  .then(function(){
+    // foto que não deu para baixar vira o desenho da camisa (nunca quebra o PDF)
+    Object.keys(imgs).forEach(function(u){if(!imgs[u])imgs[u]=u===state.settings.logo?'':shirtData('#c9c2b0');});
+    var box=document.createElement('div');box.className='catrender';box.innerHTML=catalogHTML(CAT.cat,imgs).join('');document.body.appendChild(box);
+    var pages=[].slice.call(box.querySelectorAll('.cpg')), pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true});
+    var chain=Promise.resolve();
+    pages.forEach(function(pg,i){chain=chain.then(function(){
+      if(msg)msg.textContent='Montando página '+(i+1)+' de '+pages.length+'…';
+      return window.html2canvas(pg,{scale:2,backgroundColor:'#f6f1e4',useCORS:true,logging:false}).then(function(c){
+        if(i)pdf.addPage();pdf.addImage(c.toDataURL('image/jpeg',0.9),'JPEG',0,0,210,297);
+      });
+    });});
+    return chain.then(function(){
+      box.remove();
+      var nome='catalogo-'+(CAT.cat==='all'?'transcender':catName(CAT.cat).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-'))+'-'+new Date().toISOString().slice(0,10)+'.pdf';
+      pdf.save(nome);
+      btn.disabled=false;btn.textContent='Baixar PDF';if(msg)msg.textContent='PDF pronto: '+nome+' (veja nos seus downloads).';
+    });
+  }).catch(function(e){console.error(e);btn.disabled=false;btn.textContent='Baixar PDF';if(msg)msg.textContent='Não deu para gerar o PDF agora. Confira a internet e tente de novo.';});
+}
 function stockReportRows(cat){
   var rows=[];
   state.products.filter(function(p){return p.trackStock&&(cat==='all'||p.categoryId===cat);}).sort(function(a,b){return a.name.localeCompare(b.name,'pt');}).forEach(function(p){
@@ -1147,7 +1271,7 @@ function stockReportRows(cat){
 function renderStockReport(cat){
   var rows=stockReportRows(cat), Tq=0,Tv=0,Tc=0,semCusto=0;
   rows.forEach(function(r){Tq+=r.q;Tv+=r.total;if(r.custo!=null)Tc+=r.q*r.custo;else semCusto+=r.q;});
-  var h='<div class="form report" id="relatorio"><div class="colorrow" style="justify-content:space-between"><div><h3>Relatório de estoque atual</h3><span class="hint">'+esc(cat==='all'?'Todas as categorias':catName(cat))+' · gerado em '+esc(stamp())+'</span></div><div class="radios noprint"><button class="btn sm" data-a="st-csv">Baixar planilha</button><button class="btn sm" data-a="st-print">Imprimir / PDF</button></div></div>';
+  var h='<div class="form report" id="relatorio"><div class="colorrow" style="justify-content:space-between"><div><h3>Relatório de estoque atual</h3><span class="hint">'+esc(cat==='all'?'Todas as categorias':catName(cat))+' · gerado em '+esc(stamp())+'</span></div><div class="radios noprint"><button class="btn sm dark" data-a="st-catalog">Catálogo para cliente</button><button class="btn sm" data-a="st-csv">Baixar planilha</button><button class="btn sm" data-a="st-print">Imprimir / PDF</button></div></div>';
   h+='<div class="tiles"><div class="tile"><span>Peças</span><b>'+Tq.toLocaleString('pt-BR')+'</b></div><div class="tile"><span>Valor total de venda</span><b class="pos">'+money(Tv)+'</b></div><div class="tile"><span>Valor de custo</span><b>'+money(Tc)+'</b>'+(semCusto?'<small class="low">'+semCusto+' peças sem custo</small>':'')+'</div><div class="tile"><span>Modelos</span><b>'+new Set(rows.map(function(r){return r.prod;})).size+'</b></div></div>';
   if(!rows.length)return h+'<p class="hint">Nenhuma peça em estoque.</p></div>';
   h+='<div class="scroll"><table class="otable rtable"><thead><tr><th>Camisa / cor</th><th></th><th>Tam.</th><th class="num">Qtd</th><th class="num">Preço de venda</th><th class="num">Total</th></tr></thead><tbody>';
@@ -1871,6 +1995,7 @@ app.addEventListener('click',function(ev){
     case 'register-order':registerOrder();return;
     case 's-cat':ui.scat=v;ui.openStock=null;break;
     case 'st-view':ui.stockView=v;break;
+    case 'st-catalog':openCatalog(ui.scat||'all');return;
     case 'st-csv':stockCsv(ui.scat||'all');return;
     case 'st-print':document.body.classList.add('printing-report');window.print();setTimeout(function(){document.body.classList.remove('printing-report');},500);return;
     case 'st-toggle':ui.openStock=ui.openStock===id?null:id;break;
