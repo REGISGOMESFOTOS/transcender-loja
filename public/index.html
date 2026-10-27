@@ -52,6 +52,14 @@ h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
 .hero h1{font-size:clamp(2rem,6vw,3.4rem);font-weight:800;letter-spacing:-.03em}
 .hero p{color:var(--muted);max-width:52ch;margin:.4rem 0 0}
 .filters{display:flex;gap:8px;flex-wrap:wrap;padding-block:18px;align-items:center}
+.ffilters{display:grid;gap:8px;margin:-6px 0 16px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.frow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.flabel{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;font-weight:700;color:var(--muted);min-width:68px}
+.fsize{min-width:42px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 9px;font-weight:700;font-family:var(--display);font-size:.88rem}
+.fcolor{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 11px 4px 5px;font-weight:600;font-size:.85rem}
+.fcolor .dot{width:16px;height:16px}
+.fsize[aria-pressed="true"],.fcolor[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink);background:var(--surface)}
+@media (max-width:520px){.flabel{min-width:100%}}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:.9rem}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .search{flex:1 1 200px;min-width:0;max-width:280px;margin-left:auto;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px}
@@ -472,8 +480,39 @@ function visibleProducts(){
     if(!p.active)return false;
     if(ui.cat!=='all'&&p.categoryId!==ui.cat)return false;
     if(q&&(p.name+' '+catName(p.categoryId)).toLowerCase().indexOf(q)<0)return false;
+    if((ui.fSize||ui.fColor)&&!matchesFilter(p))return false;
     return true;
   });
+}
+/* filtro por tamanho e cor: mostra só camisas que têm a combinação disponível */
+function normCor(x){return String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+function matchesFilter(p){
+  var cores=p.colors.length?p.colors.map(function(c){return c.name;}):[''];
+  var tams=p.sizes.length?p.sizes:[''];
+  if(ui.fColor)cores=cores.filter(function(c){return normCor(c)===normCor(ui.fColor);});
+  if(ui.fSize)tams=tams.filter(function(t){return t===ui.fSize;});
+  if(!cores.length||!tams.length)return false;
+  return cores.some(function(c){return tams.some(function(t){return stockOf(p,c,t)>0;});});
+}
+function filterOptions(){
+  var order=['PP','P','M','G','GG','XG','XGG','XXG','G1','G2','G3'];
+  var sizes={},colors={};
+  state.products.forEach(function(p){
+    if(!p.active)return;
+    var cs=p.colors.length?p.colors:[{name:'',hex:''}], ss=p.sizes.length?p.sizes:[''];
+    cs.forEach(function(c){ss.forEach(function(t){if(stockOf(p,c.name,t)>0){if(t)sizes[t]=1;if(c.name){var k=normCor(c.name);if(!colors[k])colors[k]={name:c.name,hex:c.hex};}}});});
+  });
+  var sz=Object.keys(sizes).sort(function(a,b){var x=order.indexOf(a),y=order.indexOf(b);return (x<0?99:x)-(y<0?99:y)||a.localeCompare(b);});
+  var cl=Object.keys(colors).map(function(k){return colors[k];}).sort(function(a,b){return a.name.localeCompare(b.name,'pt');});
+  return {sizes:sz,colors:cl};
+}
+function filterBar(){
+  var o=filterOptions();if(!o.sizes.length&&!o.colors.length)return '';
+  var h='<div class="ffilters">';
+  if(o.sizes.length)h+='<div class="frow" role="group" aria-label="Filtrar por tamanho"><span class="flabel">Tamanho</span>'+o.sizes.map(function(t){return '<button class="fsize" data-a="f-size" data-v="'+esc(t)+'" aria-pressed="'+(ui.fSize===t)+'">'+esc(t)+'</button>';}).join('')+'</div>';
+  if(o.colors.length)h+='<div class="frow" role="group" aria-label="Filtrar por cor"><span class="flabel">Cor</span>'+o.colors.map(function(c){return '<button class="fcolor" data-a="f-color" data-v="'+esc(c.name)+'" aria-pressed="'+(normCor(ui.fColor)===normCor(c.name))+'" title="'+esc(c.name)+'"><i class="dot" style="background:'+esc(c.hex||'#ccc')+'"></i>'+esc(c.name)+'</button>';}).join('')+'</div>';
+  if(ui.fSize||ui.fColor)h+='<div class="frow"><span class="hint">Mostrando camisas disponíveis'+(ui.fColor?' na cor <b>'+esc(ui.fColor)+'</b>':'')+(ui.fSize?' no tamanho <b>'+esc(ui.fSize)+'</b>':'')+'.</span><button class="link" data-a="f-clear">Limpar filtros</button></div>';
+  return h+'</div>';
 }
 function cartCount(){return cart.reduce(function(s,l){return s+l.qty;},0);}
 function cartTotal(){return cart.reduce(function(s,l){var p=prodById(l.pid);return s+(p?finalPrice(p)*l.qty:0);},0);}
@@ -495,9 +534,10 @@ function renderStore(){
   h+='<div class="filters" role="group" aria-label="Categorias"><button class="chip" data-a="cat" data-id="all" aria-pressed="'+(ui.cat==='all')+'">Todas</button>';
   cats.forEach(function(c){h+='<button class="chip" data-a="cat" data-id="'+c.id+'" aria-pressed="'+(ui.cat===c.id)+'">'+esc(c.name)+'</button>';});
   h+='<input class="search" id="search" type="search" placeholder="Buscar camisa" value="'+esc(ui.q)+'" aria-label="Buscar"></div>';
+  if(storeLoaded)h+=filterBar();
   h+='<div class="grid">';
   if(!storeLoaded)h+='<div class="empty">'+(storeError?esc(storeError):'Carregando as camisas…')+'</div>';
-  else if(!list.length)h+='<div class="empty">'+(state.products.length?'Nenhuma camisa encontrada nesta busca.':'A loja ainda não tem produtos. '+(canEdit?'Abra o Painel e cadastre o primeiro, ou importe da loja antiga em Configurações.':'Volte em breve.'))+'</div>';
+  else if(!list.length)h+='<div class="empty">'+((ui.fSize||ui.fColor)?'Nenhuma camisa disponível com esse filtro agora. <button class="link" data-a="f-clear">Limpar filtros</button>':state.products.length?'Nenhuma camisa encontrada nesta busca.':'A loja ainda não tem produtos. '+(canEdit?'Abra o Painel e cadastre o primeiro, ou importe da loja antiga em Configurações.':'Volte em breve.'))+'</div>';
   list.forEach(function(p){
     var sale=p.salePrice&&p.salePrice<p.price, out=totalStock(p)===0;
     h+='<button class="card'+(out?' soldout':'')+'" data-a="open-product" data-id="'+p.id+'">'+picHTML(p)+
@@ -1608,9 +1648,14 @@ app.addEventListener('click',function(ev){
   if(cxAction(a,id,v,t)){render();return;}
   switch(a){
     case 'cat':ui.cat=id;break;
+    case 'f-size':ui.fSize=ui.fSize===v?null:v;break;
+    case 'f-color':ui.fColor=normCor(ui.fColor)===normCor(v)?null:v;break;
+    case 'f-clear':ui.fSize=null;ui.fColor=null;break;
     case 'open-product':ui.anim=true;ui.nsent=false;ui.ncode=null;ui.err={};ui.product=id;ui.img=0;ui.color=null;ui.size=null;ui.qty=1;p=prodById(id);
       if(p&&p.colors.length===1&&colorOk(p,p.colors[0].name))ui.color=p.colors[0].name;
-      if(p&&p.sizes.length===1&&sizeOk(p,p.sizes[0]))ui.size=p.sizes[0];break;
+      if(p&&p.sizes.length===1&&sizeOk(p,p.sizes[0]))ui.size=p.sizes[0];
+      if(p&&ui.fColor){var fc=p.colors.find(function(c){return normCor(c.name)===normCor(ui.fColor);});if(fc)ui.color=fc.name;}
+      if(p&&ui.fSize&&p.sizes.indexOf(ui.fSize)>=0&&stockOf(p,ui.color,ui.fSize)>0)ui.size=ui.fSize;break;
     case 'close-product':ui.product=null;ui.chartOpen=false;break;
     case 'open-chart':ui.chartOpen=true;break;
     case 'close-chart':ui.chartOpen=false;break;
